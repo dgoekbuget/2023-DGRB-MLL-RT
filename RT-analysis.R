@@ -12,9 +12,9 @@ library(MASS)
 library(ComplexHeatmap)
 library(magick)
 library(rafalib)
-setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/mapping/bg-20kb-windows")
+#setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/mapping/bg-20kb-windows")
 plotdir <- "/blellochlab/data1/deniz/analysis/mll-rt-paper/exports" #where to export plots
-#setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/mapping/bg-50kb-windows")
+setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/mapping/bg-50kb-windows")
 
 #General settings
 geno_colors <- c("black","#999999","#CC3333","#996699")
@@ -116,7 +116,7 @@ dat_loess$dRT.naive.dCDvsKO <- dat_loess$AVGnaive.dCD - dat_loess$AVGnaive.KO
 dat_loess$dRT.naive.dKOvsWT <- dat_loess$AVGnaive.dKO - dat_loess$AVGnaive.WT
 dat_loess$dRT.naive.dCDvsWT <- dat_loess$AVGnaive.dCD - dat_loess$AVGnaive.WT
 
-#write.table(dat_loess,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-20kb-bins-loess.bed", row.names = F, quote = F, sep ="\t")
+#write.table(dat_loess,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-50kb-bins-loess.bed", row.names = F, quote = F, sep ="\t")
 
 #Circular binary segmentation
 library(DNAcopy)
@@ -127,7 +127,7 @@ input <- dat_loess[1:1000,]
 mypar(5,6)
 dat.cna  = CNA(input$AVGnaive.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "naive.WT")
-for (i in seq(12,13,by=0.1)) {
+for (i in seq(1,20,by=2)) {
   for(j in c(1e-15,1e-200)){
   seg.cna  = segment(dat.cna, nperm = 1000, alpha = j, undo.splits = "sdundo", 
                      undo.SD = i, verbose = 0)
@@ -141,7 +141,7 @@ for (i in seq(12,13,by=0.1)) {
 mypar(5,6)
 dat.cna  = CNA(input$dRT.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "delta.WT")
-for (i in seq(12,13,by=0.1)) {
+for (i in seq(1,20,by=2)) {
   for(j in c(1e-15,1e-200)){
     seg.cna  = segment(dat.cna, nperm = 1000, alpha = j, undo.splits = "sdundo", 
                        undo.SD = i, verbose = 0)
@@ -151,25 +151,25 @@ for (i in seq(12,13,by=0.1)) {
     legend("topright",legend=paste0("alpha=",j," undo.SD=",i),cex=0.8,box.lty=0,bg="transparent")
   }
 }
-#Plot selected parameters
+#Plot selected parameters (SD=5 and alpha 1e-15 for 50kb bins)
 mypar(1,2)
 dat.cna  = CNA(input$AVGnaive.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "naive.WT")
 seg.cna  = segment(dat.cna, nperm = 1000, alpha = 1e-15, undo.splits = "sdundo", 
-                   undo.SD = 12, verbose = 2)
+                   undo.SD = 5, verbose = 2)
 plot(subset(seg.cna,chromlist = "chr1"), pch = 19,
      pt.cols = c("gray","gray"),  xmaploc = T, ylim = c(-5,5),
 )
-legend("topright",legend=paste0("alpha=",1e-15," undo.SD=",12),cex=0.8,box.lty=0,bg="transparent")
+legend("topright",legend=paste0("alpha=",1e-15," undo.SD=",5),cex=0.8,box.lty=0,bg="transparent")
 
 dat.cna  = CNA(input$dRT.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "delta.WT")
 seg.cna  = segment(dat.cna, nperm = 1000, alpha = 1e-15, undo.splits = "sdundo", 
-                   undo.SD = 12, verbose = 0)
+                   undo.SD = 5, verbose = 0)
 plot(subset(seg.cna,chromlist = "chr1"), pch = 19,
      pt.cols = c("gray","gray"),  xmaploc = T, ylim = c(-5,5),
 )
-legend("topright",legend=paste0("alpha=",1e-15," undo.SD=",12),cex=0.8,box.lty=0,bg="transparent")
+legend("topright",legend=paste0("alpha=",1e-15," undo.SD=",5),cex=0.8,box.lty=0,bg="transparent")
 
 
 ##Segmentation of naive and delta(naive-to-form)
@@ -178,20 +178,31 @@ input <- dat_loess
 dat.cna  = CNA(input$AVGnaive.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "naive.WT")
 seg.cna.naive  = segment(dat.cna, nperm = 10000, alpha = 1e-15, undo.splits = "sdundo", 
-                   undo.SD = 12, verbose = 2)
+                   undo.SD = 5, verbose = 2)
 
 dat.cna  = CNA(input$dRT.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "dRT.WT")
 seg.cna.dRT  = segment(dat.cna, nperm = 10000, alpha = 1e-15, undo.splits = "sdundo", 
-                         undo.SD = 12, verbose = 2)
+                         undo.SD = 5, verbose = 2)
 
+##Descriptive statistics on segments
+##Naive
+mypar(1,2)
+hist(log10(seg.cna.naive$output$loc.end-seg.cna.naive$output$loc.start),breaks=20,
+     main=paste0("Naive Segments (N=",nrow(seg.cna.naive$output),")"),xlab="Log10(bp)",xlim=c(5,7.5))
+abline(v=median(log10(seg.cna.naive$output$loc.end-seg.cna.naive$output$loc.start)),lty="dashed",col="red")
+##dRT
+hist(log10(seg.cna.dRT$output$loc.end-seg.cna.dRT$output$loc.start),breaks=20,
+     main=paste0("Diff. Segments (N=",nrow(seg.cna.dRT$output),")"),xlab="Log10(bp)",xlim=c(5,7.5))
+abline(v=median(log10(seg.cna.dRT$output$loc.end-seg.cna.dRT$output$loc.start)),lty="dashed",col="red")
+
+# 
 # output <- seg.cna.naive$output
 # output <- output[,c(2,3,4,6)]
 # write.table(output,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-domains-naive.bed", row.names = F, quote = F, sep ="\t")
 # output <- seg.cna.dRT$output
 # output <- output[,c(2,3,4,6)]
 # write.table(output,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-delta-domains.bed", row.names = F, quote = F, sep ="\t")
-
 
 #Fig.1 
 ##PCA WT naive + formative
@@ -217,29 +228,93 @@ PC4 <- s$v[,4]*s$d[4]
 mycols <- rep(c('#8491b4ff','#00a087ff'),each=3)
 set.seed(111)
 stripchart(PC1, method = "jitter",pch=21,bg=mycols,cex=2,vertical=T,
-           ylab="PC1")
+           ylab=paste0("PC1 (",round(pvar[1],1),"% variance explained)"))
 
 ##Heatmap RT WT naive + formative
+set.seed(178)
 input <- dat_loess[,grep("WT.naive.n|WT.form.n|chr",colnames(dat_loess))]
 region <- input$chr %in% c(paste0("chr",1:19),"chrX")
 chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
 df <- input[region,-1]
 col_fun = circlize::colorRamp2(c(-5, 0, 5), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T, cluster_columns = T,km=10,
+km <-  kmeans(df, 10)
+split <- paste0("C\n", km$cluster)
+Heatmap(df, use_raster = T, cluster_columns = T,cluster_rows = F,split=split,
         column_labels = rep(c("Naive","Formative"),each=3),
         name = paste0("log2(RT) N=",nrow(df)), #title of legend
         show_row_dend = F,
         col = col_fun,
+        border=T, row_gap=unit(2,"mm"),
         row_names_gp = gpar(fontsize = 0) # Text size for row names
 ) +
   Heatmap(factor(chr), name = "chr", width = unit(5, "mm"),
           col = circlize::rand_color(length(unique(factor(chr)))))
 
-#Fig.3 - PCA WT, CKO, DKO
+#Volcano plot RT dRT
 set.seed(178)
-head(dat_loess)
+pval.dRT <- apply(
+  cbind(dat_loess$WT.form.n1.RT.Loess-dat_loess$WT.naive.n1.RT.Loess,
+        dat_loess$WT.form.n2.RT.Loess-dat_loess$WT.naive.n2.RT.Loess,
+        dat_loess$WT.form.n3.RT.Loess-dat_loess$WT.naive.n3.RT.Loess),1,function(row){
+         ttest <- t.test(row,mu=0)
+         pval <- ttest$p.value
+         return(pval)
+        }
+)
+pval.dRT.corr <- p.adjust(pval.dRT,method="fdr")
+# Calculate the 2D density using kde2d()
+density_est <- kde2d(dat_loess$dRT.WT,-log10(pval.dRT.corr), n = 250)
+# Create a color-coded density heatmap
+mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
+mypar()
+image(density_est, col = mycols, xlab = "dRT WT", ylab = "-log10(adj p-val)",xlim=c(-3.5,3.5),ylim=c(0,2),useRaster=T)
+abline(h=-log10(0.05),lty=2)
+legend("top",legend=paste0(round(100*(sum(pval.dRT.corr < 0.05)/nrow(dat_loess)),1),"% of genome"),cex=0.8,box.lty=0,bg="transparent")
+
+#Sankey plots delta-RT (naive to form), WT
+ind <- ind.p.wt <- pval.dRT.corr < 0.05  #define p-value cutoff
+dat_sk <- dat[,c("AVGnaive.WT","AVGformative.WT","dRT.WT")]
+dat_sk$naive.state <- ifelse(dat_sk$AVGnaive.WT > 0,"early","late")
+dat_sk$transition.state <- ifelse(dat_sk$dRT.WT > 0 & ind,"earlier",
+                                  ifelse(dat_sk$dRT.WT < 0 & ind,"later","unchanged"
+                                  ))
+dat_sk <- dat_sk[,4:5] %>% make_long(naive.state,transition.state)
+
+dat_sk %>% ggplot(aes(x = x, 
+                      next_x = next_x, 
+                      node = node, 
+                      next_node = next_node,
+                      fill = factor(node))) +
+  geom_sankey(flow.alpha = 0.75, node.color = "black",flow.color = "black") +
+  scale_fill_viridis_d(option = "B", alpha = 0.95) +
+  theme_sankey(base_size = 16)
+
+#Extended Data Fig.3 - PCA WT, CKO, DKO - naive/form
+set.seed(178)
 rt <- dat_loess[,grepl("naive.n|form.n",colnames(dat_loess))]
 rt <- rt[,!grepl("dCD",colnames(rt))]
+y <- rt - rowMeans(rt)
+s <- svd(y)
+label <- factor(colnames(y))
+
+mypar(1,1)
+pvar <- s$d^2/sum(s$d^2)*100
+mycols <- brewer.pal(12,"Paired")
+plot(pvar,ylab="Percent variability explained",cex=2,bg="gray",pch=21,
+     xlab="PC")
+PC1 <- s$v[,1]*s$d[1]
+PC2 <- s$v[,2]*s$d[2]
+PC3 <- s$v[,3]*s$d[3]
+PC4 <- s$v[,4]*s$d[4]
+
+plot(PC1,PC2,xlab = paste0("PC1 (",round(pvar[1]),"% var)"), ylab = paste0("PC2 (",round(pvar[2]),"% var)"),
+     bg = ifelse(grepl("WT",label),"black",ifelse(grepl("dKO",label),"#CC3333",ifelse(grepl("dCD",label),"#996699","#999999"))),
+     pch=ifelse(grepl("naive",label),21,23),cex = 2)
+
+#Extended Data Fig.3 - PCA WT, CKO, DCD - naive
+set.seed(178)
+rt <- dat_loess[,grepl("naive.n|form.n",colnames(dat_loess))]
+rt <- rt[,!grepl("dKO",colnames(rt))]
 y <- rt - rowMeans(rt)
 s <- svd(y)
 label <- factor(colnames(y))
@@ -266,90 +341,40 @@ region <- input$chr %in% c(paste0("chr",1:19),"chrX")
 chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
 df <- input[region,-1]
 col_fun = circlize::colorRamp2(c(-5, 0, 5), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T, cluster_columns = T,km=10,
+km <-  kmeans(df, 5)
+split <- paste0("C\n", km$cluster)
+Heatmap(df, use_raster = T, cluster_columns = F,cluster_rows = F,split=split,
         column_labels = c("WT","3KO","dKO","dCD"),
         name = paste0("log2(RT) N=",nrow(df)), #title of legend
         show_row_dend = F,
         col = col_fun,
+        border=T, row_gap=unit(2,"mm"),
         row_names_gp = gpar(fontsize = 0) # Text size for row names
 )
 
-##Heatmap RT CKO,DKO,dCD vs WT naive
+##Heatmap RT DKO,dCD vs KO naive
 set.seed(178)
 input <- dat_loess[,grep("AVGnaive.WT|AVGnaive.KO|AVGnaive.dKO|AVGnaive.dCD|chr",colnames(dat_loess))]
 input <- data.frame(chr=input$chr,
-                    KOvsWT=input$AVGnaive.KO-input$AVGnaive.WT,
-                    dKOvsWT=input$AVGnaive.dKO-input$AVGnaive.WT,
-                    dCDvsWT=input$AVGnaive.dCD-input$AVGnaive.WT)
+                    dKOvsWT=input$AVGnaive.dKO-input$AVGnaive.KO,
+                    dCDvsWT=input$AVGnaive.dCD-input$AVGnaive.KO)
 region <- input$chr %in% c(paste0("chr",1:19),"chrX")
 chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
 df <- input[region,-1]
 col_fun = circlize::colorRamp2(c(-4, 0, 4), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T, raster_by_magick = T, cluster_columns = T,km=5,
-        column_labels = c("3KO","dKO","dCD"),
+km <-  kmeans(df, 5)
+split <- paste0("C\n", km$cluster)
+Heatmap(df, use_raster = T, raster_by_magick = T, cluster_columns = F, cluster_rows = F, split=split,
+        column_labels = c("dKO","dCD"),
         name = paste0("log2(RT) N=",nrow(df)), #title of legend
         show_row_dend = F,
         col = col_fun,
+        border=T, row_gap=unit(2,"mm"),
         row_names_gp = gpar(fontsize = 0) # Text size for row names
 )
-
-##Heatmap delta RT WT,3KO,dKO,dCD
-input <- dat_loess[,grep("dRT.WT|dRT.KO|dRT.dKO|dRT.dCD|chr",colnames(dat_loess))]
-region <- input$chr %in% c(paste0("chr",1:19),"chrX")
-chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
-df <- input[region,-1]
-df <- df[order(df$dRT.WT,decreasing = T),]
-col_fun = circlize::colorRamp2(c(-5, 0, 5), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T,raster_by_magick = T,cluster_rows = F,cluster_columns = T,
-        name = paste0("log2(RT) N=",nrow(df)), #title of legend
-        col = col_fun,
-        row_names_gp = gpar(fontsize = 0) # Text size for row names
-)
-
-##PCA WT, CKO, dKO, dCD (naive)
-set.seed(178)
-rt <- dat_loess[,grepl("naive.n",colnames(dat_loess))]
-y <- rt - rowMeans(rt)
-s <- svd(y)
-
-label <- factor(colnames(y))
-
-mypar(1,1)
-pvar <- s$d^2/sum(s$d^2)*100
-mycols <- brewer.pal(12,"Paired")
-plot(pvar,ylab="Percent variability explained",cex=2,bg=mycols,pch=21,
-     xlab="PC")
-PC1 <- s$v[,1]*s$d[1]
-PC2 <- s$v[,2]*s$d[2]
-PC3 <- s$v[,3]*s$d[3]
-PC4 <- s$v[,4]*s$d[4]
-
-plot(PC1,PC2,xlab = paste0("PC1 (",round(pvar[1]),"% var)"), ylab = paste0("PC2 (",round(pvar[2]),"% var)"),
-     bg = ifelse(grepl("WT",label),"black",ifelse(grepl("dKO",label),"#CC3333",ifelse(grepl("dCD",label),"#996699","#999999"))),
-     pch=ifelse(grepl("naive",label),21,23),cex = 2)
-
-##Heatmap RT 3KO, dKO, dCD naive
-input <- dat_loess[,grep("chr|KO.naive.n|dKO.naive.n|dCD.naive.n",colnames(dat_loess))]
-input[,-1] <- input[,-1]-dat_loess$AVGnaive.WT
-region <- input$chr %in% c(paste0("chr",1:19),"chrX")
-chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
-df <- input[region,-1]
-
-col_fun = circlize::colorRamp2(c(-2, 0, 2), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T, cluster_columns = T,km=10,
-        column_labels = rep(c("3KO","dKO","dCD"),each=3),
-        name = "log2(RT)", #title of legend
-        show_row_dend = F,
-        col = col_fun,
-        row_names_gp = gpar(fontsize = 1) # Text size for row names
-) +
-  Heatmap(factor(chr), name = "chr", width = unit(5, "mm"),
-          col = circlize::rand_color(length(unique(factor(chr)))))
 
 ##Fold change PCA
-library(rafalib)
-library(sva)
-
+set.seed(178)
 rt <- dat_loess[,grepl("dRT.",colnames(dat_loess))]
 rt <- rt[complete.cases(rt),]
 y <- rt - rowMeans(rt)
@@ -359,7 +384,7 @@ s <- svd(y)
 mypar(1,1)
 pvar <- s$d^2/sum(s$d^2)*100
 mycols <- brewer.pal(4,"Paired")
-plot(pvar,ylab="Percent variability explained",cex=2,bg=mycols,pch=21,
+plot(pvar,ylab="Percent variability explained",cex=2,bg="gray",pch=21,
      xlab="PC")
 PC1 <- s$v[,1]*s$d[1]
 PC2 <- s$v[,2]*s$d[2]
@@ -373,82 +398,74 @@ plot(PC1,PC2,xlab=paste0("PC1 (",round(pvar[1]),"% var)"),
 legend("bottomleft",colnames(y),col=geno_colors,
        pch=16,box.lwd=1,cex = 1.5)
 
-mypar(1,1)
-plot(PC1,PC3,xlab=paste0("PC1 (",round(pvar[1]),"% var)"), 
-     ylab = paste0("PC3 (",round(pvar[3]),"% var)"),
-     bg = geno_colors, pch=21,cex = 2)
-legend("topleft",colnames(y),col=geno_colors,
-       pch=16,box.lwd=1,cex = 1.5)
-
-##Heatmap deltaRT 3KO, dKO, dCD naive to formative
-input <- dat_loess[abs(dat_loess$dRT.WT) > 1,]
-input <- input[,grep("chr|dRT.KO|dRT.dKO|dRT.dCD",colnames(input))]
+##Heatmap delta RT WT,3KO,dKO,dCD
+set.seed(178)
+input <- dat_loess[,grep("dRT.KO|dRT.dKO|dRT.dCD|chr",colnames(dat_loess))]
 region <- input$chr %in% c(paste0("chr",1:19),"chrX")
 chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
 df <- input[region,-1]
-colnames(df)
-
+df <- df[order(df$dRT.KO,decreasing = T),]
 col_fun = circlize::colorRamp2(c(-5, 0, 5), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T, cluster_columns = T,km=10,
-        column_labels = rep(c("dCD","dKO","3KO"),each=1),
-        name = "log2(RT)", #title of legend
-        show_row_dend = F,
+Heatmap(df, use_raster = T,raster_by_magick = T,raster_resize_mat = T,cluster_rows = F,cluster_columns = T,
+        name = paste0("log2(RT) N=",nrow(df)), #title of legend
         col = col_fun,
-        row_names_gp = gpar(fontsize = 1) # Text size for row names
-) +
-  Heatmap(factor(chr), name = "chr", width = unit(5, "mm"),
-          col = circlize::rand_color(length(unique(factor(chr)))))
+        border=T,
+        row_names_gp = gpar(fontsize = 0) # Text size for row names
+)
 
-#head(dat_loess[order(rowMeans(cbind(dat_loess$dRT.dKO-dat_loess$dRT.KO,dat_loess$dRT.dCD-dat_loess$dRT.KO))),c(1:3)])
+mypar()
+col_fun = colorRamp2(c(-5, -2, 0, 2, 5), c("royalblue","dodgerblue", "white", "orange","orange3"))
+col_fun(seq(0, 1, length = 20))
+plot(NULL, xlim = c(-5, 5), ylim = c(0, 1))
+x = seq(-5, 5, length = 20)
+y = rep(0.5, 20)
+points(x, y, pch = 16, col = col_fun(x), cex = 2)
 
 
-#Correlation plots of RT in WT vs all genotypes in naive
-# mypar(4,4)
-# avgRT <- colnames(dat_loess)[grepl("AVGnaive",colnames(dat_loess))]
-# avgRT <- avgRT[c(1,4,3,2)]
-# for (i in 1:length(avgRT)) {
-#   x <- dat_loess[,avgRT[i]]
-#   for (j in 1:length(avgRT)) {
-#     y <- dat_loess[,avgRT[j]]
-#     density_est <- kde2d(x, y, n = 200)
-#     mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
-#     image(density_est, col = mycols, xlab = gsub("AVGnaive.","",avgRT[i]), 
-#           ylab = gsub("AVGnaive.","",avgRT[j]),xlim=c(-5,5),ylim=c(-5,5),main=paste0("rho=",round(cor(x,y,method="spearman"),3)))
-#     abline(0,1)
-#   }
-# }
+
+#Correlation of RT changes between dCD and dKO in naive
+mypar(1,1)
+# Calculate the 2D density using kde2d()
+density_est <- kde2d(dat_loess$dRT.naive.dKOvsKO,dat_loess$dRT.naive.dCDvsKO, n = 250)
+mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
+image(density_est,
+     useRaster=T,
+     xlab="dKOvsKO",
+     ylab = "dCDvsKO",
+     col=mycols,
+     xlim = c(-2.5,2.5),ylim=c(-2.5,2.5),
+     main=paste0("Naive RT, rho=",round(cor(dat_loess$dRT.naive.dKOvsKO,dat_loess$dRT.naive.dCDvsKO,method="spearman"),3)))
+abline(lm(dat_loess$dRT.naive.dKOvsKO~dat_loess$dRT.naive.dCDvsKO),col="dodgerblue",lty="dashed",lwd=3)
+
+#Correlation of deltaRT changes dCD and dKO
+x <- dat_loess$dRT.dKO-dat_loess$dRT.KO
+y <- dat_loess$dRT.dCD-dat_loess$dRT.KO
+
+# Calculate the 2D density using kde2d()
+density_est <- kde2d(x, y, n = 250)
+
+# Create a contour plot
+image(density_est,
+        useRaster=T,
+        xlab="ddRT (dKO vs KO)",
+        ylab = "ddRT (dCD vs KO)",
+        col=mycols,
+        xlim = c(-2.5,2.5),ylim=c(-2.5,2.5),
+        main=paste0("ddRT, rho=",round(cor(x,y,method="spearman"),3)))
+abline(lm(x~y),col="dodgerblue",lty="dashed",lwd=3)
 
 #Histogram of RT distribution in naive
 ##compute densities
-density1 <- density(dat_loess[,"AVGnaive.WT"])
-density2 <- density(dat_loess[,"AVGnaive.KO"])
-density3 <- density(dat_loess[,"AVGnaive.dKO"])
-density4 <- density(dat_loess[,"AVGnaive.dCD"])
+density1 <- density(dat_loess[,"AVGnaive.dKO"]-dat_loess[,"AVGnaive.KO"])
+density2 <- density(dat_loess[,"AVGnaive.dCD"]-dat_loess[,"AVGnaive.KO"])
 
 # Create an empty plot to initialize the plotting area
-plot(density1, type = "n",xlim=c(-5,5),xlab="RT")
+plot(density1, type = "n",xlim=c(-3,3),xlab="naive RT")
 
 # Plot density estimates as lines
-lines(density1, col = geno_colors[1], lwd = 3)
-lines(density2, col = geno_colors[2], lwd = 3)
-lines(density3, col = geno_colors[3], lwd = 3)
-lines(density4, col = geno_colors[4], lwd = 3)
-legend("topright", legend = c("WT", "KO", "dKO", "dCD"), col = geno_colors, lty = 1, lwd = 2)
-
-#Histogram of RT distribution in naive
-##compute densities
-density1 <- density(dat_loess[,"AVGnaive.KO"]-dat_loess[,"AVGnaive.WT"])
-density2 <- density(dat_loess[,"AVGnaive.dKO"]-dat_loess[,"AVGnaive.WT"])
-density3 <- density(dat_loess[,"AVGnaive.dCD"]-dat_loess[,"AVGnaive.WT"])
-
-# Create an empty plot to initialize the plotting area
-plot(density1, type = "n",xlim=c(-5,5),xlab="RT")
-
-# Plot density estimates as lines
-lines(density1, col = geno_colors[2], lwd = 3)
-lines(density2, col = geno_colors[3], lwd = 3)
-lines(density3, col = geno_colors[4], lwd = 3)
-legend("topright", legend = c("WT", "KO", "dKO", "dCD"), col = geno_colors, lty = 1, lwd = 2)
+lines(density1, col = geno_colors[3], lwd = 3)
+lines(density2, col = geno_colors[4], lwd = 3)
+legend("topright", legend = c("dKO", "dCD"), col = geno_colors[3:4], lty = 1, lwd = 2)
 
 #Histogram of RT distribution in naive-to-form transition
 ##compute densities
@@ -457,27 +474,101 @@ density2 <- density(dat_loess[,"dRT.dKO"])
 density3 <- density(dat_loess[,"dRT.dCD"])
 
 # Create an empty plot to initialize the plotting area
-plot(density1, type = "n",xlim=c(-5,5),ylim=c(0,1),xlab="RT")
+plot(density1, type = "n",xlim=c(-3,3),ylim=c(0,1),xlab="dRT",title="")
 
 # Plot density estimates as lines
 lines(density1, col = geno_colors[2], lwd = 3)
 lines(density2, col = geno_colors[3], lwd = 3)
 lines(density3, col = geno_colors[4], lwd = 3)
 legend("topright", legend = c("KO", "dKO", "dCD"), col = geno_colors[-1], lty = 1, lwd = 2)
+ks.test(dat_loess[,"dRT.KO"], dat_loess[,"dRT.dKO"])
+ks.test(dat_loess[,"dRT.KO"], dat_loess[,"dRT.dCD"])
 
-#Correlation between changes in dKO and changes in dCD during nf transition
-x <- dat_loess$dRT.dCD-dat_loess$dRT.KO
-y <- dat_loess$dRT.dKO-dat_loess$dRT.KO
+#Volcano plot dRT
+##dKO
+set.seed(178)
+pval.dRT <- apply(
+  cbind(dat_loess$dKO.form.n1.RT.Loess-dat_loess$dKO.naive.n1.RT.Loess,
+        dat_loess$dKO.form.n2.RT.Loess-dat_loess$dKO.naive.n2.RT.Loess,
+        dat_loess$dKO.form.n3.RT.Loess-dat_loess$dKO.naive.n3.RT.Loess),1,function(row){
+          ttest <- t.test(row,mu=0)
+          pval <- ttest$p.value
+          return(pval)
+        }
+)
+pval.dRT.corr <- p.adjust(pval.dRT,method="fdr")
 
 # Calculate the 2D density using kde2d()
-density_est <- kde2d(x, y, n = 500)
-
-# Create a contour plot
-contour(density_est, xlab = "dCD", ylab = "dKO",xlim=c(-2,2),ylim=c(-2,2))
-
+density_est <- kde2d(dat_loess$dRT.dKO,-log10(pval.dRT.corr), n = 250)
 # Create a color-coded density heatmap
 mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
-image(density_est, col = mycols, xlab = "dCD", ylab = "dKO",xlim=c(-2,2),ylim=c(-2,2))
+mypar()
+image(density_est, col = mycols, xlab = "dRT dKO", ylab = "-log10(adj p-val)",xlim=c(-3.5,3.5),ylim=c(0,2),useRaster=T)
+abline(h=-log10(0.05),lty=2)
+legend("top",legend=paste0(round(100*(sum(pval.dRT.corr < 0.05)/nrow(dat_loess)),1),"% of genome"),cex=0.8,box.lty=0,bg="transparent")
+
+#Sankey plots delta-RT (WT vs dKO)
+ind <- pval.dRT.corr < 0.05  #define p-value cutoff
+dat_sk <- dat[,c("dRT.WT","dRT.dKO")]
+dat_sk$sign <- ind
+dat_sk$wt.state <- ifelse(dat_sk$dRT.WT > 0 & ind.p.wt,"Earlier",ifelse(dat_sk$dRT.WT < 0 & ind.p.wt,"Later","Unchanged"))
+dat_sk$transition.state <- ifelse(dat_sk$dRT.dKO > 0 & dat_sk$sign,"Earlier",
+                                  ifelse(dat_sk$dRT.dKO < 0 & dat_sk$sign,"Later","Unchanged"
+                                  ))
+table(dat_sk$wt.state)
+table(dat_sk$transition.state)
+dat_sk <- dat_sk[,4:5] %>% make_long(wt.state,transition.state)
+dat_sk %>% ggplot(aes(x = x, 
+                      next_x = next_x, 
+                      node = node, 
+                      next_node = next_node,
+                      fill = factor(node))) +
+  geom_sankey(flow.alpha = 0.75, node.color = "black",flow.color = "black") +
+  scale_fill_viridis_d(option = "B", alpha = 0.95) +
+  theme_sankey(base_size = 16)
+
+##dCD
+set.seed(178)
+pval.dRT <- apply(
+  cbind(dat_loess$dCD.form.n1.RT.Loess-dat_loess$dCD.naive.n1.RT.Loess,
+        dat_loess$dCD.form.n2.RT.Loess-dat_loess$dCD.naive.n2.RT.Loess,
+        dat_loess$dCD.form.n3.RT.Loess-dat_loess$dCD.naive.n3.RT.Loess),1,function(row){
+          ttest <- t.test(row,mu=0)
+          pval <- ttest$p.value
+          return(pval)
+        }
+)
+pval.dRT.corr <- p.adjust(pval.dRT,method="fdr")
+
+# Calculate the 2D density using kde2d()
+density_est <- kde2d(dat_loess$dRT.dCD,-log10(pval.dRT.corr), n = 250)
+# Create a color-coded density heatmap
+mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
+mypar()
+image(density_est, col = mycols, xlab = "dRT dCD", ylab = "-log10(adj p-val)",xlim=c(-3.5,3.5),ylim=c(0,2),useRaster=T)
+abline(h=-log10(0.05),lty=2)
+legend("top",legend=paste0(round(100*(sum(pval.dRT.corr < 0.05)/nrow(dat_loess)),1),"% of genome"),cex=0.8,box.lty=0,bg="transparent")
+
+#Sankey plots delta-RT (WT vs dCD)
+ind <- pval.dRT.corr < 0.05  #define p-value cutoff
+dat_sk <- dat[,c("dRT.WT","dRT.dCD")]
+dat_sk$sign <- ind
+dat_sk$wt.state <- ifelse(dat_sk$dRT.WT > 0 & ind.p.wt,"Earlier",ifelse(dat_sk$dRT.WT < 0 & ind.p.wt,"Later","Unchanged"))
+dat_sk$transition.state <- ifelse(dat_sk$dRT.dCD > 0 & dat_sk$sign,"Earlier",
+                                  ifelse(dat_sk$dRT.dCD < 0 & dat_sk$sign,"Later","Unchanged"
+                                  ))
+table(dat_sk$wt.state)
+table(dat_sk$transition.state)
+dat_sk <- dat_sk[,4:5] %>% make_long(wt.state,transition.state)
+
+dat_sk %>% ggplot(aes(x = x, 
+                      next_x = next_x, 
+                      node = node, 
+                      next_node = next_node,
+                      fill = factor(node))) +
+  geom_sankey(flow.alpha = 0.75, node.color = "black",flow.color = "black") +
+  scale_fill_viridis_d(option = "B", alpha = 0.95) +
+  theme_sankey(base_size = 16)
 
 #Auto-correlation QC
 mypar(1,8)
@@ -608,24 +699,7 @@ stripchart(x=d, method = "jitter",pch=17,col=mycols,cex=2,vertical=T,
 
 #write.table(dat,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/deltaRT-50kbBins.bed", row.names = F, quote = F, sep ="\t")
 
-#Sankey plots delta-RT (naive to form), WT
-##Simple
-s <- 0.5 #define log2 fold change cutoff
-dat_sk <- dat[,c("AVGnaive.WT","AVGformative.WT","dRT.WT")]
-dat_sk$naive.state <- ifelse(dat_sk$AVGnaive.WT > 0,"early","late")
-dat_sk$transition.state <- ifelse(dat_sk$dRT.WT > s,"earlier",
-                                  ifelse(dat_sk$dRT.WT < -s,"later","unchanged"
-                                         ))
-dat_sk <- dat_sk[,4:5] %>% make_long(naive.state,transition.state)
 
-dat_sk %>% ggplot(aes(x = x, 
-                      next_x = next_x, 
-                      node = node, 
-                      next_node = next_node,
-                      fill = factor(node))) +
-  geom_sankey(flow.alpha = 0.75, node.color = "black",flow.color = "black") +
-  scale_fill_viridis_d(option = "B", alpha = 0.95) +
-  theme_sankey(base_size = 16)
 
 ##More categories
 s <- 0.5 #define log2 fold change cutoff
