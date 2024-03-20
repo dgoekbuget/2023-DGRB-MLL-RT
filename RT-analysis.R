@@ -1,4 +1,7 @@
-#Analysis replication Timing naive vs formative
+#This script is used to perform loess smoothening, segmentation, statistics, and other RT analyses done in manuscript
+#The input is mm10 mapped counts turned into log2 ratio by dividing Early/Late counts as detailed in Marchal et al 2018 Nat Prot
+
+#Load packages
 library(readr)
 library(preprocessCore)
 library(DNAcopy)
@@ -12,11 +15,13 @@ library(MASS)
 library(ComplexHeatmap)
 library(magick)
 library(rafalib)
-#setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/mapping/bg-20kb-windows")
+options(scipen = 0)
+
+#Define file paths and other parameters
 plotdir <- "/blellochlab/data1/deniz/analysis/mll-rt-paper/exports" #where to export plots
 setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/mapping/bg-50kb-windows")
 
-#General settings
+##Colors
 geno_colors <- c("black","#999999","#CC3333","#996699")
 
 #Import and prepare RT data
@@ -37,6 +42,7 @@ colnames(dat)[4:ncol(dat)] <- gsub(".bg","",colnames(dat)[4:ncol(dat)])
 dat$start <- as.integer(dat$start)
 dat$stop <- as.integer(dat$stop)
 
+#Perform Loess smoothening and export bedgraph files for plotting (after bigwig conversion)
 # # Needs to be done once only
 # # Generate qnorm bedgraphs per sample
 # for(i in 4:ncol(merge_norm)){write.table(merge_norm[complete.cases(merge_norm[,i]), c(1,2,3,i)],
@@ -64,6 +70,7 @@ dat$stop <- as.integer(dat$stop)
 #                                          gsub(".bg" , ".Loess.bg" , colnames(AllLoess[[i]]))[4], sep= "\t",
 #                                          row.names=FALSE, quote=FALSE, col.names = FALSE)}
 
+#Load Loess smoothened data
 merge_loess <- read_delim("merge_Loess_norm_RT.txt", delim = "\t", 
                     escape_double = FALSE, trim_ws = TRUE)
 dat_loess <- data.frame(merge_loess)
@@ -76,8 +83,7 @@ dat_loess$stop <- as.integer(dat_loess$stop)
 dat <- dat_loess[,c(1:3,25:27,22:24,19:21,16:18,13:15,10:12,7:9,4:6)]
 dat_loess <- dat_loess[,c(1:3,25:27,22:24,19:21,16:18,13:15,10:12,7:9,4:6)]
 
-#Average replicates
-colnames(dat)
+#Average replicates and generate the various RT comparison
 dat$AVGnaive.WT <- (dat[,4] + dat[,5] + dat[,6])/3
 dat$AVGformative.WT <- (dat[,7] + dat[,8] + dat[,9])/3
 dat$AVGnaive.KO <- (dat[,10] + dat[,11] + dat[,12])/3
@@ -121,10 +127,11 @@ dat_loess$dRT.naive.dCDvsWT <- dat_loess$AVGnaive.dCD - dat_loess$AVGnaive.WT
 #Circular binary segmentation
 library(DNAcopy)
 set.seed(178)
+
 ##Empiric determination of optimized segmentation paramters
 input <- dat_loess[1:1000,]
 
-mypar(5,6)
+mypar(4,5)
 dat.cna  = CNA(input$AVGnaive.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "naive.WT")
 for (i in seq(1,20,by=2)) {
@@ -138,7 +145,7 @@ for (i in seq(1,20,by=2)) {
   }
 }
 
-mypar(5,6)
+mypar(4,5)
 dat.cna  = CNA(input$dRT.WT, input$chr, input$start, data.type = "logratio", 
                sampleid  = "delta.WT")
 for (i in seq(1,20,by=2)) {
@@ -186,25 +193,18 @@ seg.cna.dRT  = segment(dat.cna, nperm = 10000, alpha = 1e-15, undo.splits = "sdu
                          undo.SD = 5, verbose = 2)
 
 ##Descriptive statistics on segments
-##Naive
+##Naive size
 mypar(1,2)
 hist(log10(seg.cna.naive$output$loc.end-seg.cna.naive$output$loc.start),breaks=20,
-     main=paste0("Naive Segments (N=",nrow(seg.cna.naive$output),")"),xlab="Log10(bp)",xlim=c(5,7.5))
+     main=paste0("Naive Segments (N=",nrow(seg.cna.naive$output),")"),
+     xlab="Log10(bp)",xlim=c(5,7.5))
 abline(v=median(log10(seg.cna.naive$output$loc.end-seg.cna.naive$output$loc.start)),lty="dashed",col="red")
 ##dRT
 hist(log10(seg.cna.dRT$output$loc.end-seg.cna.dRT$output$loc.start),breaks=20,
      main=paste0("Diff. Segments (N=",nrow(seg.cna.dRT$output),")"),xlab="Log10(bp)",xlim=c(5,7.5))
 abline(v=median(log10(seg.cna.dRT$output$loc.end-seg.cna.dRT$output$loc.start)),lty="dashed",col="red")
 
-# 
-# output <- seg.cna.naive$output
-# output <- output[,c(2,3,4,6)]
-# write.table(output,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-domains-naive.bed", row.names = F, quote = F, sep ="\t")
-# output <- seg.cna.dRT$output
-# output <- output[,c(2,3,4,6)]
-# write.table(output,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-delta-domains.bed", row.names = F, quote = F, sep ="\t")
 
-#Fig.1 
 ##PCA WT naive + formative
 library(rafalib)
 set.seed(178)
@@ -212,6 +212,7 @@ rt <- dat_loess[,grepl("WT.naive.n|WT.form.n",colnames(dat_loess))]
 rt <- rt[complete.cases(rt),]
 y <- rt - rowMeans(rt)
 s <- svd(y)
+label <- factor(colnames(y))
 
 mypar(1,1)
 pvar <- s$d^2/sum(s$d^2)*100
@@ -224,11 +225,14 @@ PC2 <- s$v[,2]*s$d[2]
 PC3 <- s$v[,3]*s$d[3]
 PC4 <- s$v[,4]*s$d[4]
 
-##PC1 only stripchart
+##PC1 vs PC2
 mycols <- rep(c('#8491b4ff','#00a087ff'),each=3)
 set.seed(111)
-stripchart(PC1, method = "jitter",pch=21,bg=mycols,cex=2,vertical=T,
-           ylab=paste0("PC1 (",round(pvar[1],1),"% variance explained)"))
+# stripchart(PC1, method = "jitter",pch=21,bg=mycols,cex=2,vertical=T,
+#            ylab=paste0("PC1 (",round(pvar[1],1),"% variance explained)"))
+
+plot(PC1,PC2,xlab = paste0("PC1 (",round(pvar[1]),"% var)"), ylab = paste0("PC2 (",round(pvar[2]),"% var)"),
+     bg = ifelse(grepl("naive",label),"#8491B4","#00a087ff"),cex = 2,pch=21)
 
 ##Heatmap RT WT naive + formative
 set.seed(178)
@@ -278,7 +282,9 @@ dat_sk$naive.state <- ifelse(dat_sk$AVGnaive.WT > 0,"early","late")
 dat_sk$transition.state <- ifelse(dat_sk$dRT.WT > 0 & ind,"earlier",
                                   ifelse(dat_sk$dRT.WT < 0 & ind,"later","unchanged"
                                   ))
+table(dat_sk$transition.state)
 dat_sk <- dat_sk[,4:5] %>% make_long(naive.state,transition.state)
+
 
 dat_sk %>% ggplot(aes(x = x, 
                       next_x = next_x, 
@@ -373,6 +379,10 @@ Heatmap(df, use_raster = T, raster_by_magick = T, cluster_columns = F, cluster_r
         row_names_gp = gpar(fontsize = 0) # Text size for row names
 )
 
+#Control RT of changing sites in naive
+boxplot(dat_loess$AVGnaive.KO[abs(dat_loess$dRT.naive.dKOvsKO) > 1 & abs(dat_loess$dRT.naive.dCDvsKO) > 1],
+        ylab="Naive control RT")
+
 ##Fold change PCA
 set.seed(178)
 rt <- dat_loess[,grepl("dRT.",colnames(dat_loess))]
@@ -398,7 +408,7 @@ plot(PC1,PC2,xlab=paste0("PC1 (",round(pvar[1]),"% var)"),
 legend("bottomleft",colnames(y),col=geno_colors,
        pch=16,box.lwd=1,cex = 1.5)
 
-##Heatmap delta RT WT,3KO,dKO,dCD
+##Heatmap delta RT 3KO,dKO,dCD
 set.seed(178)
 input <- dat_loess[,grep("dRT.KO|dRT.dKO|dRT.dCD|chr",colnames(dat_loess))]
 region <- input$chr %in% c(paste0("chr",1:19),"chrX")
@@ -420,8 +430,6 @@ plot(NULL, xlim = c(-5, 5), ylim = c(0, 1))
 x = seq(-5, 5, length = 20)
 y = rep(0.5, 20)
 points(x, y, pch = 16, col = col_fun(x), cex = 2)
-
-
 
 #Correlation of RT changes between dCD and dKO in naive
 mypar(1,1)
@@ -466,6 +474,33 @@ plot(density1, type = "n",xlim=c(-3,3),xlab="naive RT")
 lines(density1, col = geno_colors[3], lwd = 3)
 lines(density2, col = geno_colors[4], lwd = 3)
 legend("topright", legend = c("dKO", "dCD"), col = geno_colors[3:4], lty = 1, lwd = 2)
+
+
+#Histogram of RT distribution in formative dKO vs ctr
+##compute densities
+density1 <- density(dat_loess[,"AVGformative.KO"])
+density2 <- density(dat_loess[,"AVGformative.dKO"])
+
+# Create an empty plot to initialize the plotting area
+plot(density1, type = "n",xlim=c(-3,3),xlab="formative RT", main="Formative RT")
+
+# Plot density estimates as lines
+lines(density1, col = geno_colors[2], lwd = 3)
+lines(density2, col = geno_colors[3], lwd = 3)
+legend("topright", legend = c("Ctr","dKO"), col = geno_colors[2:3], lty = 1, lwd = 2)
+
+#Histogram of RT distribution in formative
+##compute densities
+density1 <- density(dat_loess[,"AVGnaive.KO"])
+density2 <- density(dat_loess[,"AVGnaive.dKO"])
+
+# Create an empty plot to initialize the plotting area
+plot(density1, type = "n",xlim=c(-3,3),xlab="naive RT", main="Naive RT")
+
+# Plot density estimates as lines
+lines(density1, col = geno_colors[2], lwd = 3)
+lines(density2, col = geno_colors[3], lwd = 3)
+legend("topright", legend = c("Ctr","dKO"), col = geno_colors[2:3], lty = 1, lwd = 2)
 
 #Histogram of RT distribution in naive-to-form transition
 ##compute densities
@@ -549,6 +584,53 @@ image(density_est, col = mycols, xlab = "dRT dCD", ylab = "-log10(adj p-val)",xl
 abline(h=-log10(0.05),lty=2)
 legend("top",legend=paste0(round(100*(sum(pval.dRT.corr < 0.05)/nrow(dat_loess)),1),"% of genome"),cex=0.8,box.lty=0,bg="transparent")
 
+#Volcano plot dKO vs KO naive
+set.seed(178)
+pval.dRT <- apply(
+  cbind(dat_loess$dKO.naive.n1.RT.Loess-dat_loess$KO.naive.n1.RT.Loess,
+        dat_loess$dKO.naive.n2.RT.Loess-dat_loess$KO.naive.n2.RT.Loess,
+        dat_loess$dKO.naive.n3.RT.Loess-dat_loess$KO.naive.n3.RT.Loess),1,function(row){
+          ttest <- t.test(row,mu=0)
+          pval <- ttest$p.value
+          return(pval)
+        }
+)
+pval.dRT.corr <- p.adjust(pval.dRT,method="fdr")
+# Calculate the 2D density using kde2d()
+density_est <- kde2d(dat_loess$dRT.naive.dKOvsKO,-log10(pval.dRT.corr), n = 250)
+# Create a color-coded density heatmap
+mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
+mypar()
+image(density_est, col = mycols, xlab = "naive RT (dKO vs Ctr)", ylab = "-log10(adj p-val)",xlim=c(-3.5,3.5),ylim=c(0,2),useRaster=T)
+abline(h=-log10(0.1),lty=2)
+abline(v=-1,lty=2)
+abline(v=1,lty=2)
+legend("top",legend=paste0(round(100*(sum(pval.dRT.corr < 0.1)/nrow(dat_loess)),1),"% of genome"),cex=0.8,box.lty=0,bg="transparent")
+
+#Volcano plot dCD vs KO naive
+set.seed(178)
+pval.dRT <- apply(
+  cbind(dat_loess$dCD.naive.n1.RT.Loess-dat_loess$KO.naive.n1.RT.Loess,
+        dat_loess$dCD.naive.n2.RT.Loess-dat_loess$KO.naive.n2.RT.Loess,
+        dat_loess$dCD.naive.n3.RT.Loess-dat_loess$KO.naive.n3.RT.Loess),1,function(row){
+          ttest <- t.test(row,mu=0)
+          pval <- ttest$p.value
+          return(pval)
+        }
+)
+pval.dRT.corr <- p.adjust(pval.dRT,method="fdr")
+# Calculate the 2D density using kde2d()
+density_est <- kde2d(dat_loess$dRT.naive.dCDvsKO,-log10(pval.dRT.corr), n = 250)
+# Create a color-coded density heatmap
+mycols <- colorRampPalette(c("white", "blue", "red", "orange"))(100)
+mypar()
+image(density_est, col = mycols, xlab = "naive RT (dCD vs Ctr)", ylab = "-log10(adj p-val)",xlim=c(-3.5,3.5),ylim=c(0,2),useRaster=T)
+abline(h=-log10(0.1),lty=2)
+abline(v=-1,lty=2)
+abline(v=1,lty=2)
+legend("top",legend=paste0(round(100*(sum(pval.dRT.corr < 0.1)/nrow(dat_loess)),1),"% of genome"),cex=0.8,box.lty=0,bg="transparent")
+
+
 #Sankey plots delta-RT (WT vs dCD)
 ind <- pval.dRT.corr < 0.05  #define p-value cutoff
 dat_sk <- dat[,c("dRT.WT","dRT.dCD")]
@@ -560,160 +642,6 @@ dat_sk$transition.state <- ifelse(dat_sk$dRT.dCD > 0 & dat_sk$sign,"Earlier",
 table(dat_sk$wt.state)
 table(dat_sk$transition.state)
 dat_sk <- dat_sk[,4:5] %>% make_long(wt.state,transition.state)
-
-dat_sk %>% ggplot(aes(x = x, 
-                      next_x = next_x, 
-                      node = node, 
-                      next_node = next_node,
-                      fill = factor(node))) +
-  geom_sankey(flow.alpha = 0.75, node.color = "black",flow.color = "black") +
-  scale_fill_viridis_d(option = "B", alpha = 0.95) +
-  theme_sankey(base_size = 16)
-
-#Auto-correlation QC
-mypar(1,8)
-acf(dat_loess$AVGnaive.WT,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGformative.WT,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGnaive.KO,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGformative.KO,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGnaive.dKO,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGformative.dKO,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGnaive.dCD,lag = 1000,na.action = na.pass)$acf[2]
-acf(dat_loess$AVGformative.dCD,lag = 1000,na.action = na.pass)$acf[2]
-
-#Correlation plot
-library(corrplot)
-cc <- cor(dat_loess[,c(4:27)],method = "spearman")
-cc <- cor(dat[,c(4:27)],method = "spearman")
-mypar()
-colnames(cc) <- gsub(".20kb.RT.Loess","",colnames(cc))
-rownames(cc) <- gsub(".20kb.RT.Loess","",colnames(cc))
-corrplot(cc,tl.col = "black",col.lim=c(0.8,1),is.corr = F,order="original")
-
-#Generate 2D domain heatmap
-input <- dat_loess[dat_loess$chr=="chr1",c("AVGform.WT")]
-input <- dat_loess[dat_loess$chr=="chr1",c("AVGform.WT")]-dat_loess[dat_loess$chr=="chr1",c("AVGnaive.WT")]
-
-# mat <- matrix(1,nrow=length(input),ncol=length(input))
-# for (i in 1:(length(input)-2)) {
-#   for (j in 1:(length(input)-2)) {
-#     #mat[i,j] <- dist(c(input[i],input[j]),method="euclidian")
-#     #mat[i,j] <- cosine_similarity(input[i],input[j])
-#     #mat[i,j] <- signed_euclidean_distance(input[i],input[j])
-#     mat[i,j] <- cor(
-#       x=c(input[i],input[i+1],input[i+2]),
-#                     y=c(input[j],input[j+1],input[j+2])^2
-#     )
-#   }
-# }
-
-# Create logical matrices for positive and negative values
-positive_matrix <- outer(input > 0, input > 0, FUN = "&")
-negative_matrix <- outer(input < 0, input < 0, FUN = "&")
-
-# Initialize the result matrix with zeros
-mat <- matrix(0, nrow = length(input), ncol = length(input))
-
-# Fill in the result matrix
-mat[positive_matrix] <- 1
-mat[negative_matrix] <- -1
-
-# Set diagonal elements to 0
-diag(mat) <- 0
-
-mycols <- colorRampPalette(c("dodgerblue", "white", "orange"))(100)
-Heatmap(mat,cluster_rows = F,cluster_columns = F, use_raster = T)
-
-
-# Create a single vector
-my_vector <- c(1, 2, 4, 8, 10)
-
-# Convert the vector into a matrix with one row
-my_matrix <- matrix(my_vector, nrow = 1)
-
-# Calculate the distance matrix using the dist() function
-distance_matrix <- dist(my_matrix)
-
-# Print the distance matrix
-print(distance_matrix)
-
-head(dist(input[1:100]))
-head(input)
-
-input <- dat_loess[abs(dat_loess$dRT.WT) > 1,]
-input <- input[,grep("chr|dRT.KO|dRT.dKO|dRT.dCD",colnames(input))]
-region <- input$chr %in% c(paste0("chr",1:19),"chrX")
-chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
-df <- input[region,-1]
-colnames(df)
-
-col_fun = circlize::colorRamp2(c(-5, 0, 5), c("dodgerblue", "white", "orange"))
-Heatmap(df, use_raster = T, cluster_columns = T,km=10,
-        column_labels = rep(c("dCD","dKO","3KO"),each=1),
-        name = "log2(RT)", #title of legend
-        show_row_dend = F,
-        col = col_fun,
-        row_names_gp = gpar(fontsize = 1) # Text size for row names
-) +
-  Heatmap(factor(chr), name = "chr", width = unit(5, "mm"),
-          col = circlize::rand_color(length(unique(factor(chr)))))
-
-#Changes in the RT
-##Percentage change analysis
-##WT naive to formative
-##Scale naive to baseline and propagate errors to formative
-control <- cbind(dat$WT.naive.n1.20kb.RT.Loess,dat$WT.naive.n2.20kb.RT.Loess,dat$WT.naive.n3.20kb.RT.Loess)
-treat <- cbind(dat$WT.form.n1.20kb.RT.Loess,dat$WT.form.n2.20kb.RT.Loess,dat$WT.form.n3.20kb.RT.Loess)
-f <- matrix(1,nrow=nrow(control),ncol=ncol(control))/2^control
-control_scaled <- log2(2^control*f)
-treat_scaled <- log2(2^treat*f)
-
-mypar(mar = c(6, 2.5, 1.6, 1.1))
-mycols <- brewer.pal(4,"Paired")
-d <- data.frame("Pct.0.5.earlier" = 100*apply(treat_scaled > 0.5,2,sum)/nrow(treat_scaled),
-                "Pct.1.earlier" = 100*apply(treat_scaled > 1,2,sum)/nrow(treat_scaled),
-                "Pct.0.5.later" = 100*apply(treat_scaled < -0.5,2,sum)/nrow(treat_scaled),
-                "Pct.1.later" = 100*apply(treat_scaled < -1,2,sum)/nrow(treat_scaled)
-                )
-stripchart(x=d, method = "jitter",pch=17,col=mycols,cex=2,vertical=T,
-           ylab=c("% genome changed"),las=2)
-
-
-##WT, KO, dKO naive
-##Scale naive to baseline and propagate errors to formative
-control <- cbind(dat$KO.naive.n1,dat$KO.naive.n2,dat$KO.naive.n3)
-treat1 <- cbind(dat$dKO.naive.n1,dat$dKO.naive.n2,dat$dKO.naive.n3)
-f <- matrix(1,nrow=nrow(control),ncol=ncol(control))/2^control
-control_scaled <- log2(2^control*f)
-treat1_scaled <- log2(2^treat1*f)
-
-mypar(mar = c(6, 2.5, 1.6, 1.1))
-mycols <- brewer.pal(4,"Paired")
-d <- data.frame("Pct.0.5.earlier" = 100*apply(treat1_scaled > 0.5,2,sum)/nrow(treat1_scaled),
-                "Pct.1.earlier" = 100*apply(treat1_scaled > 1,2,sum)/nrow(treat1_scaled),
-                "Pct.0.5.later" = 100*apply(treat1_scaled < -0.5,2,sum)/nrow(treat1_scaled),
-                "Pct.1.later" = 100*apply(treat1_scaled < -1,2,sum)/nrow(treat1_scaled)
-)
-stripchart(x=d, method = "jitter",pch=17,col=mycols,cex=2,vertical=T,
-           ylab=c("% genome changed"),las=2)
-
-#write.table(dat,"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/deltaRT-50kbBins.bed", row.names = F, quote = F, sep ="\t")
-
-
-
-##More categories
-s <- 0.5 #define log2 fold change cutoff
-dat_sk <- dat[,c("AVGnaive.WT","AVGformative.WT","dRT.WT")]
-dat_sk$naive.state <- ifelse(dat_sk$AVGnaive.WT > 0,"early","late")
-dat_sk$transition.state <- ifelse(dat_sk$dRT.WT > s & dat_sk$AVGnaive.WT < 0 & dat_sk$AVGformative.WT > 0,"late-to-early",
-                                  ifelse(dat_sk$dRT.WT < -s & dat_sk$AVGnaive.WT > 0 & dat_sk$AVGformative.WT < 0,"early-to-late",
-                                         ifelse(dat_sk$dRT.WT > s & dat_sk$AVGnaive.WT < 0 & dat_sk$AVGformative.WT < 0,"later-to-late",
-                                                ifelse(dat_sk$dRT.WT > s & dat_sk$AVGnaive.WT > 0 & dat_sk$AVGformative.WT > 0,"early-to-earlier",
-                                                       ifelse(dat_sk$dRT.WT < -s & dat_sk$AVGnaive.WT < 0 & dat_sk$AVGformative.WT < 0,"late-to-later",
-                                                              ifelse(dat_sk$dRT.WT < -s & dat_sk$AVGnaive.WT > 0 & dat_sk$AVGformative.WT > 0,"earlier-to-early","unchanged"
-                                                              ))))))
-
-dat_sk <- dat_sk[,4:5] %>% make_long(naive.state,transition.state)
 
 dat_sk %>% ggplot(aes(x = x, 
                       next_x = next_x, 
@@ -804,85 +732,4 @@ dat_sk %>% ggplot(aes(x = x,
   scale_fill_viridis_d(option = "B", alpha = 0.95) +
   theme_sankey(base_size = 16)
 
-#Heatmaps
-
-#Figure 1 addition: Genome wide replication timing changes
-
-#Create input and filter for bins that change more than s in WT from naive to form
-s=2
-input <- dat[abs(dat$dRT.WT) > s,c("chr", "WT.naive.n1",       "WT.naive.n2" ,      "WT.naive.n3", "KO.naive.n1",       "KO.naive.n2",      "KO.naive.n3",
-                  "dKO.naive.n1",      "dKO.naive.n2",      "dKO.naive.n3", "dCD.naive.n1",      "dCD.naive.n2",      "dCD.naive.n3",
-                  "WT.formative.n1",   "WT.formative.n2",   "WT.formative.n3", "KO.formative.n1",   "KO.formative.n2",   "KO.formative.n3",        
-                  "dKO.formative.n1",  "dKO.formative.n2",  "dKO.formative.n3",  "dCD.formative.n1",  "dCD.formative.n2",  "dCD.formative.n3")]
-region <- input$chr %in% c(paste0("chr",1:19),"chrX")
-chr <- factor(input$chr[region],levels = c(paste0("chr",1:19),"chrX"))
-df <- input[region,-1]
-Heatmap(df, use_raster = T, cluster_columns = T,km=5,
-        #column_labels = c("Naive","Formative"),
-        name = "log2(RT)", #title of legend
-        show_row_dend = T,
-        row_names_gp = gpar(fontsize = 1) # Text size for row names
-) +
-    Heatmap(factor(chr), name = "chr", width = unit(5, "mm"),
-          col = circlize::rand_color(length(unique(factor(chr)))))
-
-##Z score version of heatmap
-df_scaled <- t(scale(t(df)))
-Heatmap(df_scaled, use_raster = T, cluster_columns = T,km=5,
-        #column_labels = c("Naive","Formative"),
-        name = "Z-score(RT)", #title of legend
-        show_row_dend = T,
-        row_names_gp = gpar(fontsize = 1) # Text size for row names
-) +
-  Heatmap(factor(chr), name = "chr", width = unit(5, "mm"),
-          col = circlize::rand_color(length(unique(factor(chr)))))
-
-
-
-# #Custom segmentation based on sign changes for naive RT
-# signal <- dat_loess[,c("AVGnaive.WT")]
-# sign_changes <- which(diff(sign(signal)) != 0)
-# bounds <- dat_loess[sign_changes,c(1:3)]
-# doms <- data.frame()
-# for (i in unique(bounds$chr)) {
-#   x <- bounds[bounds$chr==i,]
-#   for (j in 1:(nrow(x)-1)) {
-#     doms <- rbind(doms,c(x[j,]$chr,x[j,]$stop+1,x[j+1,]$stop,abs(x[j+1,]$stop-x[j,]$stop+1)))
-#   }
-# }
-# colnames(doms) <- c("chr","start","stop","dom.size")
-
-# 
-# #Calculate median RT per domain
-# columnsToSummarize <- -c(1:3)
-# ovlp <- findOverlaps(GRanges(doms),GRanges(dat_loess),ignore.strand=T)
-# sumVals  <- apply(dat_loess[subjectHits(ovlp),columnsToSummarize], 2, function(x) tapply(x, factor(queryHits(ovlp)), median,na.rm=T))
-# doms[,colnames(sumVals)] <- NA
-# doms[unique(queryHits(ovlp)),5:ncol(doms)] <- sumVals
-# colnames(doms)
-# #write.table(doms[,c("chr","start","stop","dom.size","AVGnaive.WT")],"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-domains-naive.bed", row.names = F, quote = F, sep ="\t")
-# 
-# #Custom segmentation based on sign changes for delta RT
-# signal <- dat_loess[,c("dRT.WT")]
-# sign_changes <- which(diff(sign(signal)) != 0)
-# bounds <- dat_loess[sign_changes,c(1:3)]
-# deltadoms <- data.frame()
-# for (i in unique(bounds$chr)) {
-#   x <- bounds[bounds$chr==i,]
-#   for (j in 1:(nrow(x)-1)) {
-#     deltadoms <- rbind(deltadoms,c(x[j,]$chr,x[j,]$stop+1,x[j+1,]$stop,abs(x[j+1,]$stop-x[j,]$stop+1)))
-#   }
-# }
-# head(deltadoms)
-# colnames(deltadoms) <- c("chr","start","stop","dom.size")
-# deltadoms <- deltadoms[deltadoms$dom.size > 100001,]
-
-#Calculate median RT per domain
-# columnsToSummarize <- -c(1:3)
-# ovlp <- findOverlaps(GRanges(deltadoms),GRanges(dat_loess),ignore.strand=T)
-# sumVals  <- apply(dat_loess[subjectHits(ovlp),columnsToSummarize], 2, function(x) tapply(x, factor(queryHits(ovlp)), median,na.rm=T))
-# deltadoms[,colnames(sumVals)] <- NA
-# deltadoms[unique(queryHits(ovlp)),5:ncol(deltadoms)] <- sumVals
-# colnames(deltadoms)
-#write.table(deltadoms[,c("chr","start","stop","dom.size","dRT.WT")],"/blellochlab/data1/deniz/analysis/mll-rt-paper/exports/RT-delta-domains.bed", row.names = F, quote = F, sep ="\t")
-
+#EOF

@@ -1,3 +1,5 @@
+#This script is used for machine learning of features predictive of naive RT within naive RT segments
+
 #Load packages
 library(readr)
 library(rafalib)
@@ -13,10 +15,11 @@ library(MASS)
 library(ComplexHeatmap)
 
 
+#Define location of background corrected peaks signal summed by RT segment for each chromatin feature
 setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/ml/domains-naive")
 (files <-dir(pattern="backgroundCorSum.bed"))
 
-#Load data
+#Load signal data and merge into data.frame
 for (i in 1:length(files)) {
   if(i == 1){
     rt <- read_delim(files[i],"\t", escape_double = FALSE, trim_ws = TRUE,col_names=F)[,1:6]
@@ -29,7 +32,7 @@ for (i in 1:length(files)) {
   }
 }
 
-#Create timing categories
+#Create binary RT categories
 rt$timing <- ifelse(rt$RT > 0, "E",ifelse(rt$RT < 0, "L",ifelse(rt$RT == 0,NA,NA)))
 
 #Separate counts from meta
@@ -42,6 +45,7 @@ counts$timing <- factor(counts$timing)
 dat <- counts[complete.cases(counts),]
 meta <- meta[complete.cases(counts),]
 
+#Simplify column names
 colnames(dat) <- c("timing",paste0(rep(c("H2AX","H2AZ","H2BK5ac","H3.3","H3K14ac","H3K27ac",
                                          "H3K27me3","H3K36me1","H3K36me2","H3K4me2","H3K4me3",
                                          "H3K9ac","H3K9me2","H3K9me3","H4K14ac","H4K20me1","H4K8ac","H2AK119Ub",
@@ -52,7 +56,7 @@ dat <- dat[,c("timing",paste0(rep(c("PPolII","Rad21","H3K4me1","H3K4me2","H3K4me
          "H4K20me1","H3K27me3","H3K9me2","H3K9me3","H2AK119Ub"),each=2),c(".N1",".N2")))
          ]
 
-#Calculate average chromatin mark signal
+#Calculate average chromatin feature signal from replicates
 mean_dat <- data.frame(dat$timing)
 for (i in seq(1,42,by=2)) {
   m <- data.frame(rowMeans(dat[,c(i+1,i+2)]))
@@ -63,7 +67,7 @@ for (i in seq(1,42,by=2)) {
 #Define color vectors
 color21 <- colorRampPalette(c("#336699","#FF9966"))(100)
 
-#Machine learning feature selection
+#Machine learning using Elastic Net Regression
 set.seed(178)
 X <- mean_dat[,-1]
 X$RT <- meta$RT
@@ -82,8 +86,8 @@ fit <- train(RT ~ .,
 
 ##Plot Observed over predicted
 predictions <- extractPrediction(list(fit))
-mypar()
 
+mypar()
 plot(predictions$pred,predictions$obs,xlab = "Predicted",
      ylab ="Observed",main=paste0("RT naive"," rho=",round(cor(predictions$pred,predictions$obs,method="spearman"),3)),
      pch=21,bg="gray",cex=1,lwd=1.5,ylim=c(-5,5),xlim=c(-5,5))
@@ -96,7 +100,7 @@ rafalib::mypar(1,1,mar = c(2.5, 5, 1.6, 1.1))
 barplot(coefs[-1][order(coefs[-1])],horiz=T,las=1,xlab="Parameter weight",col = "gray",
         cex.names=0.8,names=rownames(coefs)[-1][order(coefs[-1])],xlim=c(-0.5,0.5))
 
-#Calculate pairwise prediction using glm
+#Perform pairwise regression using linear regression or glm
 residual_dispersion_results <- matrix(data=NA,nrow=21,ncol=21)
 
 # Function to calculate residual dispersion for a glm model
@@ -180,6 +184,7 @@ for (i in c(1:10)) {
     dat_clustered[,11+i] <- gsub("gray","negative",dat_clustered[,11+i]) 
   }
 }
+
 #Highlight clusters in scatterplot
 mypar(5,2)
 for(i in 1:(ncol(X)-1)){
@@ -198,7 +203,6 @@ for(i in 1:(ncol(X)-1)){
   boxplot(input[ind1],input[ind2],main=colnames(dat_clustered)[i],
           col=c("lightblue","dodgerblue"),ylab="RT",names=c("Low","High"))
 }
-
 
 #Compute Jaccard similarity between high signal regions
 jacc_res <- sapply(1:10,function(x){
@@ -241,152 +245,4 @@ rafalib::mypar(1,1,mar = c(2.5, 10, 1.6, 1.1))
 barplot(fit_results$Adj.R2[order(fit_results$Adj.R2)],horiz=T,las=1,xlab=expression("Adjusted R" ^ 2),col = "gray",
         cex.names=0.8,names=fit_results$Feature[order(fit_results$Adj.R2)])
 
-
-  
-
-
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-#older code
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-##############################################################################################################
-# Calculate Spearman correlations for each column
-correlations <- lapply(dat[,-1], function(col) cor(meta$RT, col, method = "spearman"))
-
-# Combine the correlations and group information into a data frame
-correlation_df <- data.frame(Group = gsub(".N1|.N2","",names((unlist(correlations)))), Replicate = rep(1:2, times = 21), Correlation = unlist(correlations))
-
-# Calculate the mean correlation per group
-mean_correlations <- correlation_df %>%
-  group_by(Group) %>%
-  dplyr::summarize(Mean_Correlation = mean(Correlation))
-
-# Reorder the "Group" factor variable based on "Mean Correlation"
-mean_correlations <- mean_correlations %>%
-  arrange(Mean_Correlation) %>%
-  mutate(Group = factor(Group, levels = Group))
-
-# Create a bar plot
-ggplot(mean_correlations, aes(x = Mean_Correlation, y = factor(Group), fill = factor(Group))) +
-  geom_bar(stat = "identity", position = "identity") +
-  geom_jitter(data = correlation_df, aes(x = Correlation, y = factor(Group)), shape=21,size=3, 
-              position = position_jitterdodge(jitter.width = 6, dodge.width = 0.7)) +
-  labs(x = "Mean Correlation", y = "Group") +
-  theme_minimal() +
-  theme(legend.position = "none") 
-
-# Calculate Spearman correlations and p-values for each group
-input <- dat[,-1]
-stats <- sapply(seq(1,42,by=2), function(x){
-  c(colnames(input[x]),cor.test(meta$RT,input[,c(x:x+1)])$p.value)
-})
-nms <- stats[1,]
-nms <- gsub(".N1","",nms)
-stats <- as.numeric(stats[2,])
-names(stats) <- nms
-ind <- match(mean_correlations$Group,names(stats))
-stats <- stats[ind]
-
-# Define a function to map values to colors using a logarithmic scale
-gradient_colors <- colorRampPalette(c("darkgray", "white"))(100)
-map_values_to_colors_log <- function(values, gradient_colors) {
-  # Ensure values are positive for the logarithmic scale
-  values[values <= 0] <- 1e-300  # Avoid taking the logarithm of zero or negative values
-  log_values <- log10(values)
-  
-  # Scale the logarithmic values to the range [0, 1]
-  scaled_values <- (log_values - min(log_values)) / (max(log_values) - min(log_values))
-  
-  # Find the color indices
-  color_indices <- floor(scaled_values * (length(gradient_colors) - 1)) + 1
-  
-  # Interpolate colors
-  interpolated_colors <- gradient_colors[color_indices]
-  
-  return(interpolated_colors)
-}
-
-# Map values to colors with a logarithmic scale
-mapped_colors_log <- map_values_to_colors_log(stats, gradient_colors)
-
-ggplot(mean_correlations, aes(x = Mean_Correlation, y = factor(Group), fill=factor(Group))) +
-  geom_bar(stat = "identity", position = "identity",color="black") +
-  geom_jitter(data = correlation_df, aes(x = Correlation, y = factor(Group)), shape=21,size=3,
-              position = position_jitterdodge(jitter.width = 6, dodge.width = 0.7)) +
-  scale_fill_manual(values=mapped_colors_log) +
-  labs(x = "Mean Correlation", y = "Group") +
-  theme_minimal() +
-  theme(legend.position = "none") 
-
-
-
-fit_results <- sapply(1:(ncol(X)-1),function(x){
-  input <- X[,c(x,ncol(X))]
-  fit <- train(RT ~ .,
-               data = input,
-               method = "lm",
-               preProcess = c("center", "scale"),
-               tuneLength = 25,
-               trControl = control)
-  fstat <- summary(fit)$fstatistic
-  pval <- pf(f[1],f[2],f[3],lower.tail=F)
-  out <- c(colnames(input)[1],fit$results$RMSE,fit$results$Rsquared,coef(summary(fit))[2,1],pval)
-  names(out) <- c("Predictor","RMSE","R2","Coefficient","P-value")
-  out
-})
-
-#Obtain P-values
-fit_results <- sapply(seq(1,(ncol(X)-1),by=2),function(x){
-  input <- X[,c(x,ncol(X))]
-  fit <- train(RT ~ .,
-               data = input,
-               method = "lm",
-               preProcess = c("center", "scale"),
-               tuneLength = 25,
-               trControl = control)
-  fstat <- summary(fit)$fstatistic
-  pval <- pf(f[1],f[2],f[3],lower.tail=F)
-  out <- c(colnames(input)[1],fit$results$RMSE,fit$results$Rsquared,coef(summary(fit))[2,1],pval)
-  names(out) <- c("Predictor","RMSE","R2","Coefficient","P-value")
-  out
-})
-fit_results <- data.frame(t(fit_results))
-
-group <- gsub(".N1|.N2","",fit_results$Predictor)
-fit_results <- data.frame(apply(fit_results[,-1],2,as.numeric))
-fit_results$group <- group
-fit_results$replicate <- rep(c(1,2),nrow(fit_results)/2)
-n <- nrow(X)
-
-mean_fit_results <- fit_results %>% group_by(group) %>%
-  dplyr::summarize(
-    mean_rmse = mean(RMSE),
-    mean_r2 = mean(R2),
-    mean_coef = mean(Coefficient),
-    pvalue = t.test(c(Coefficient),mu=0)$p.value #2*pt(-abs(diff(Coefficient)/diff(SE_Coef)),n-2)
-  ) %>%
-  arrange(mean_coef) %>%mutate(group = factor(group, levels = group))
-data.frame(mean_fit_results)
-
-p1 <- ggplot(data= mean_fit_results, aes(y=group,x=mean_coef)) +
-  geom_bar(stat = "identity", position = "identity",fill="gray",color="black") +
-  geom_jitter(data = fit_results, aes(x = Coefficient, y = group),fill="gray", shape=21,size=3) +
-  theme_minimal()
-
-p2 <- ggplot(data= mean_fit_results, aes(y=group,x=mean_r2)) +
-  geom_bar(stat = "identity", position = "identity",fill="gray",color="black") +
-  geom_jitter(data = fit_results, aes(x = R2, y = group),fill="gray", shape=21,size=3) +
-  theme_minimal()
-grid.arrange(p1,p2,ncol=2)
-
-plot(X[,c(2,11)], col = res$cluster, pch = 19, main = "K-Means Clustering")
-plot(X[,c(2,11)], col = gmm_result$classification, pch = 19, main = "GMM Clustering")
-
+#EOF

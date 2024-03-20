@@ -1,3 +1,5 @@
+#This script is used for machine learning of features predictive of naive RT within naive RT segments
+
 #Load packages
 library(readr)
 library(rafalib)
@@ -12,10 +14,11 @@ library(GenomicRanges)
 library(MASS)
 library(ComplexHeatmap)
 
+#Define location of background corrected peaks signal summed by RT segment for each chromatin feature
 setwd("/blellochlab/data1/deniz/analysis/mll-rt-paper/ml/domains-delta")
 files <-dir("naive",pattern="backgroundCorSum.bed")
 
-#Load data
+#Load signal data and merge into data.frame
 for (i in 1:length(files)) {
     if(i == 1){
         rt <- read_delim(paste0("naive/",files[i]),"\t", escape_double = FALSE, trim_ws = TRUE,col_names=F)[,1:6]
@@ -33,7 +36,7 @@ for (i in 1:length(files)) {
         colnames(rt)[(ncol(rt)-1):ncol(rt)] <- c(gsub(".RTdomain.backgroundCorSum.bed",".form.N1",files[i]),gsub(".RTdomain.backgroundCorSum.bed",".form.N2",files[i]))
 }
 
-#Create timing categories
+#Create binary RT categories
 rt$timing <- ifelse(rt$dRT > 0, "E",ifelse(rt$dRT < 0, "L",ifelse(rt$dRT == 0,NA,NA)))
 
 #Separate counts from meta
@@ -47,11 +50,12 @@ counts$timing <- factor(counts$timing)
 dat <- counts[complete.cases(counts),]
 meta <- meta[complete.cases(counts),]
 
-#Calculate differential signal
+#Calculate signal difference (EpiLC minus naive)
 ncol(dat)
 dat <- cbind(dat[,1],dat[,44:85]-dat[,2:43])
 colnames(counts)[1] <- "timing"
 
+#Simplify column names
 colnames(dat) <- c("timing",paste0(rep(c("H2AX","H2AZ","H2BK5ac","H3.3","H3K14ac","H3K27ac",
                                          "H3K27me3","H3K36me1","H3K36me2","H3K4me2","H3K4me3",
                                          "H3K9ac","H3K9me2","H3K9me3","H4K14ac","H4K20me1","H4K8ac","H2AK119Ub",
@@ -62,7 +66,7 @@ dat <- dat[,c("timing",paste0(rep(c("PPolII","Rad21","H3K4me1","H3K4me2","H3K4me
                                     "H4K20me1","H3K27me3","H3K9me2","H3K9me3","H2AK119Ub"),each=2),c(".N1",".N2")))
 ]
 
-#Calculate average chromatin mark signal
+#Calculate average chromatin feature signal from replicates
 mean_dat <- data.frame(dat$timing)
 for (i in seq(1,42,by=2)) {
   m <- data.frame(rowMeans(dat[,c(i+1,i+2)]))
@@ -73,7 +77,7 @@ for (i in seq(1,42,by=2)) {
 #Define color vectors
 color21 <- colorRampPalette(c("#336699","#FF9966"))(100)
 
-#Machine learning feature selection
+#Machine learning using Elastic Net Regression
 set.seed(178)
 X <- mean_dat[,-1]
 X$RT <- meta$dRT
@@ -105,7 +109,7 @@ rafalib::mypar(1,1,mar = c(2.5, 5, 1.6, 1.1))
 barplot(coefs[-1][order(coefs[-1])],horiz=T,las=1,xlab="Parameter weight",col = "gray",
         cex.names=0.8,names=rownames(coefs)[-1][order(coefs[-1])],xlim=c(-0.5,0.5))
 
-#Calculate pairwise prediction using glm
+#Perform pairwise regression using linear regression or glm
 residual_dispersion_results <- matrix(data=NA,nrow=21,ncol=21)
 
 # Function to calculate residual dispersion for a glm model
